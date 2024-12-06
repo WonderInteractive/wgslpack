@@ -44,11 +44,14 @@ wgslpack ./source.wgsl -o ./dest.wgsl --compress
 
 ### JavaScript/WebAssembly
 ```javascript
-// ES6 Module
-import { WGSLPack } from 'wgslpack';
+import Module from './wgslpack.js';
+const WGSLPack = await Module();
 
-const pack = await WGSLPack.init();
-const minified = pack.process(sourceCode);
+WGSLPack.init();
+const packed = WGSLPack.pack(shader_code);
+const unpacked = WGSLPack.unpack(packed);
+
+console.log('Original length:', str.length, 'Packed length:', packed.length, 'Unpacked length:', unpacked.length, 'Unpacked:', unpacked);
 ```
 
 ## Build Requirements
