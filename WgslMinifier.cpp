@@ -42,8 +42,6 @@ enum WGSLTokenTypes : uint16_t {
     FLOAT4,
     FLOAT8,
     U, I,
-    //TYPE,            // Built-in types like f32, i32, etc
-    ACCESS,          // access modifiers
     IN,             // 'in' keyword
     // high frequency types
     LET, VAR, IF, DOT, FMA, VEC2, VEC3, VEC4, VEC2I, VEC3I, VEC4I,
@@ -105,6 +103,8 @@ enum WGSLTokenTypes : uint16_t {
     REFRACT, REVERSE_BITS, ROUND, SATURATE, SIGN, SIN, SINH, SMOOTHSTEP, SQRT,
     STEP, TAN, TANH, TRANSPOSE, TRUNC, UNPACK2X16_FLOAT, UNPACK2X16_SNORM,
     UNPACK2X16_UNORM, UNPACK4X8_SNORM, UNPACK4X8_UNORM, UNPACK4X_I8, UNPACK4X_U8,
+    PACK2X16_FLOAT, PACK2X16_SNORM,
+    PACK2X16_UNORM, PACK4X8_SNORM, PACK4X8_UNORM, PACK4X_I8, PACK4X_U8,
     WORKGROUP_BARRIER,
     // Access modes
     READ, WRITE, READ_WRITE,
@@ -187,78 +187,6 @@ std::string decode_swizzle(uint8_t encoded, bool is_four_component) {
     return result;
 }
 
-void test_swizzle_permutations() {
-    static constexpr char components[] = "xyzw";
-    int tested = 0;
-
-    // Test all 1-component permutations
-    for (int i = 0; i < 4; i++) {
-        std::string original;
-        original += components[i];
-
-        uint8_t encoded = encode_swizzle(original, false);
-        std::string decoded = decode_swizzle(encoded, false);
-
-        assert(decoded == original);
-        tested++;
-    }
-    // Test all 2-component permutations
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) {
-            std::string original;
-            original += components[i];
-            original += components[j];
-
-            uint8_t encoded = encode_swizzle(original, false);
-            std::string decoded = decode_swizzle(encoded, false);
-
-            assert(decoded == original);
-            tested++;
-        }
-    // Test all 3-component permutations
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++) {
-                std::string original;
-                original += components[i];
-                original += components[j];
-                original += components[k];
-
-                uint8_t encoded = encode_swizzle(original, false);
-                std::string decoded = decode_swizzle(encoded, false);
-
-                assert(decoded == original);
-                tested++;
-            }
-
-    // Test all 4-component permutations
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++)
-            for (int k = 0; k < 4; k++)
-                for (int l = 0; l < 4; l++) {
-                    std::string original;
-                    original += components[i];
-                    original += components[j];
-                    original += components[k];
-                    original += components[l];
-
-                    uint8_t encoded = encode_swizzle(original, true);
-                    std::string decoded = decode_swizzle(encoded, true);
-
-                    assert(decoded == original);
-                    tested++;
-                }
-
-    // Test that rgba maps to same values as xyzw
-    assert(encode_swizzle("rgba", true) == encode_swizzle("xyzw", true));
-    assert(encode_swizzle("rg", false) == encode_swizzle("xy", false));
-
-    // Test that stpq maps to same values as xyzw
-    assert(encode_swizzle("stpq", true) == encode_swizzle("xyzw", true));
-    assert(encode_swizzle("st", false) == encode_swizzle("xy", false));
-
-    printf("Successfully tested %d permutations\n", tested);
-}
 uint32_t data_size = 0;
 uint32_t data_size2 = 0;
 void AppendVar(uint8_t*& data, uint16_t value) {
@@ -296,10 +224,6 @@ void AppendToken(uint8_t*& data, WGSLTokenTypes type) {
 }
 WGSLTokenTypes GetToken(const uint8_t* data, size_t& offset) {
     return (WGSLTokenTypes)GetVar(data, offset);
-}
-bool NeedsSpaceBefore(WGSLTokenTypes type) {
-    return type == IDENTIFIER || type == TYPE ||
-           type == ACCESS;
 }
 void AppendReservedToken(uint8_t*& data, WGSLTokenTypes type) {
     AppendToken(data, type);
@@ -682,6 +606,13 @@ void InitReservedWords() {
         {"tanh", TANH},
         {"transpose", TRANSPOSE},
         {"trunc", TRUNC},
+        {"pack2x16float", PACK2X16_FLOAT},
+		{"pack2x16snorm", PACK2X16_SNORM},
+		{"pack2x16unorm", PACK2X16_UNORM},
+		{"pack4x8snorm", PACK4X8_SNORM},
+		{"pack4x8unorm", PACK4X8_UNORM},
+		{"pack4xI8", PACK4X_I8},
+		{"pack4xU8", PACK4X_U8},
         {"unpack2x16float", UNPACK2X16_FLOAT},
         {"unpack2x16snorm", UNPACK2X16_SNORM},
         {"unpack2x16unorm", UNPACK2X16_UNORM},
@@ -794,7 +725,7 @@ bool isNumberLiteral(const std::string_view s) {
     // - Optional leading '-'
     // - Then digits
     // - Possibly '.' or 'f' or 'u'
-    // This is a simplified check. Real WGSL might have stricter rules.
+    // This is a simplified check. wndr-todo: make sure this follows all wgsl rules.
     size_t start = 0;
     if (!s.empty() && s[0] == '-') {
         start = 1;
@@ -1016,54 +947,15 @@ std::string ToWGSL(const std::vector<uint8_t>& d) {
             text += val;
         }
         else {
-            // Could be reserved, string-based token, operator, etc.
-            // If it's reserved or no extra data, we have it by type alone.
-            // We know reserved tokens have no length following, so we must distinguish:
-
-            // Heuristic: if it's known to be reserved or a token that doesn't need data:
-            // Let's say all textual tokens store a length except reserved tokens and a few special cases.
-            // If this token is one that is known to require text (IDENTIFIER, KEYWORD, etc),
-            // we read length and data. If reserved, we know from isReservedWord or from a known type range.
-
-            // Suppose we know reserved tokens are in a certain range or we have a helper:
-            // Check if token is something that doesn't need data:
-            if (token == ACCESS || token == TYPE) {
-                // These need a length
-                uint8_t len = ReadU8(d, offset);
-                text = std::string((const char*)&d[offset], len);
-                offset += len;
-            }
-            else {
-                // Maybe it's a reserved token or something known by type alone
-                // getReservedWord(token)
-                text = getReservedWord(token);
-            }
+            text = getReservedWord(token);
         }
 
         // Spacing logic
         WGSLTokenTypes currType = (WGSLTokenTypes)token;
         WGSLTokenTypes prevTypeEnum = (prevToken >= 0) ? (WGSLTokenTypes)prevToken : NEWLINE;
-        bool addSpace = false;
-
-        if (prevToken >= 0 && !wgsl.empty()) {
-            if (NeedsSpaceBefore(currType)) {
-                if (!std::isspace((unsigned char)wgsl.back())) {
-                    if ((prevTypeEnum == IDENTIFIER || prevTypeEnum == TYPE || prevTypeEnum == ACCESS)
-                        && (currType == IDENTIFIER || currType == TYPE || currType == ACCESS)) {
-                        addSpace = true;
-                    }
-                    else if ((prevTypeEnum == IDENTIFIER || prevTypeEnum == NUMBER4 || prevTypeEnum == NUMBER8 || prevTypeEnum == TYPE)) {
-                        addSpace = true;
-                    }
-                }
-            }
-        }
-
 
         wgsl += text;
 
-        if (addSpace) wgsl += " ";
-        else
         switch (token) {
         case RETURN:
         case STRUCT:
@@ -1079,36 +971,6 @@ std::string ToWGSL(const std::vector<uint8_t>& d) {
             // Just print whatever text we got from getReservedWord
             break;
         }
-#if 0
-        switch (token) {
-        case STRUCT:
-            wgsl += text + " ";
-            break;
-        case ACCESS:
-            wgsl += text;
-            break;
-        case IDENTIFIER:
-            if (wgsl.back() != ' ' && text.size() > 1)
-                wgsl += " ";
-            wgsl += text;
-            break;
-        case TYPE:
-        case NUMBER4:
-        case NUMBER8:
-            wgsl += text;
-            break;
-        case ANNOTATION:
-            wgsl += "\n";
-            addIndent();
-            wgsl += text + " ";
-            break;
-        default:
-            // Reserved or unknown token that had no extra data
-            // Just print whatever text we got from getReservedWord
-            wgsl += text;
-            break;
-        }
-#endif
         prevToken = token;
     }
 
