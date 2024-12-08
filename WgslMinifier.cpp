@@ -129,6 +129,9 @@ enum WGSLTokenTypes : uint16_t {
     TEXTURE_SAMPLE_COMPARE, TEXTURE_SAMPLE_COMPARE_LEVEL, TEXTURE_SAMPLE_GRAD, TEXTURE_SAMPLE_LEVEL,
     TEXTURE_GATHER, TEXTURE_GATHER_COMPARE, TEXTURE_GATHER_BIAS, TEXTURE_GATHER_BIAS_COMPARE,
     TEXTURE_GATHER_COMPARE_LEVEL, TEXTURE_GATHER_LEVEL,
+    // Derivative functions
+    DPDX, DPDY, FWIDTH, DPDX_COARSE, DPDY_COARSE, FWIDTH_COARSE,
+    DPDX_FINE, DPDY_FINE, FWIDTH_FINE,
     // Special identifiers that shouldn't be renamed
     MAIN, DERIVATIVE_UNIFORMITY, OFF
 };
@@ -699,6 +702,16 @@ void InitReservedWords() {
         {"textureGatherBiasCompare", TEXTURE_GATHER_BIAS_COMPARE},
         {"textureGatherCompareLevel", TEXTURE_GATHER_COMPARE_LEVEL},
         {"textureGatherLevel", TEXTURE_GATHER_LEVEL},
+        // Derivative functions
+        {"dpdx", DPDX},
+        {"dpdy", DPDY},
+        {"fwidth", FWIDTH},
+        {"dpdxCoarse", DPDX_COARSE},
+        {"dpdyCoarse", DPDY_COARSE},
+        {"fwidthCoarse", FWIDTH_COARSE},
+        {"dpdxFine", DPDX_FINE},
+        {"dpdyFine", DPDY_FINE},
+        {"fwidthFine", FWIDTH_FINE},
         // Special identifiers that shouldn't be renamed
         {"main", MAIN},
         {"derivative_uniformity", DERIVATIVE_UNIFORMITY},
