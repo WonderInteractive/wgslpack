@@ -133,7 +133,7 @@ enum WGSLTokenTypes : uint16_t {
     DPDX, DPDY, FWIDTH, DPDX_COARSE, DPDY_COARSE, FWIDTH_COARSE,
     DPDX_FINE, DPDY_FINE, FWIDTH_FINE,
     // Special identifiers that shouldn't be renamed
-    MAIN, DERIVATIVE_UNIFORMITY, OFF
+    MAIN, DERIVATIVE_UNIFORMITY, READONLY_AND_READWRITE_STORAGE_TEXTURES, OLD_VALUE, OFF
 };
 uint8_t encode_swizzle(const std::string_view text, bool is_four_component) {
     static constexpr uint8_t lookup[26] = {
@@ -548,7 +548,7 @@ void InitReservedWords() {
         {"atanh", ATANH},
         {"atomicAdd", ATOMIC_ADD},
         {"atomicAnd", ATOMIC_AND},
-        {"atomicCompare_exchange_weak", ATOMIC_COMPARE_EXCHANGE_WEAK},
+        {"atomicCompareExchangeWeak", ATOMIC_COMPARE_EXCHANGE_WEAK},
         {"atomicExchange", ATOMIC_EXCHANGE},
         {"atomicLoad", ATOMIC_LOAD},
         {"atomicMax", ATOMIC_MAX},
@@ -715,6 +715,8 @@ void InitReservedWords() {
         // Special identifiers that shouldn't be renamed
         {"main", MAIN},
         {"derivative_uniformity", DERIVATIVE_UNIFORMITY},
+        {"readonly_and_readwrite_storage_textures", READONLY_AND_READWRITE_STORAGE_TEXTURES},
+		{"old_value", OLD_VALUE},
         {"off", OFF},
     }) {
         AddReservedWord(token.first, token.second);
@@ -926,19 +928,21 @@ std::string ToWGSL(const std::vector<uint8_t>& d) {
             uint32_t val = ReadU32(d, offset);
             float db;
             memcpy(&db, &val, 4);
-            text = std::to_string(db);
-            while (text.back() == '0') {
-                text.pop_back();
-            }
+			text = std::format("{:#g}", db);
+			if (!text.contains('e'))
+			while (text.back() == '0') {
+				text.pop_back();
+			}
         }
         else if (token == FLOAT8) {
             uint64_t val = ReadU64(d, offset);
             double db;
             memcpy(&db, &val, 8);
-            text = std::to_string(db);
-            while (text.back() == '0') {
-                text.pop_back();
-            }
+			text = std::format("{:#g}", db);
+			if (!text.contains('e'))
+			while (text.back() == '0') {
+				text.pop_back();
+			}
         }
         else if (token == IDENTIFIER) {
             uint16_t val = GetVar(d.data(), offset);
@@ -970,13 +974,15 @@ std::string ToWGSL(const std::vector<uint8_t>& d) {
         wgsl += text;
 
         switch (token) {
-        case RETURN:
-        case STRUCT:
-        case ALIAS:
-        case CONST:
-        case VAR:
-        case LET:
-        case FN:
+		case REQUIRES:
+		case RETURN:
+		case STRUCT:
+		case ALIAS:
+		case CONST:
+		case CASE:
+		case VAR:
+		case LET:
+		case FN:
             wgsl += " ";
             break;
         default:

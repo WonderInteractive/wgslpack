@@ -60,6 +60,34 @@ console.log('Original length:', str.length, 'Packed length:', packed.length, 'Un
 - C++23 compatible compiler
 - Emscripten (for WebAssembly build)
 
+## Future Optimizations
+
+### Binary Size Optimizations
+- Function call compaction:
+  - `textureLoad(VolumetricTexture, x_414, x_415);` → `textureLoad VolumetricTexture x_414 x_415` (5 bytes savings)
+  - `myFunc(x_414, x_415);` → `myFunc x_414 x_415E` (3 bytes savings)
+- Common pattern compaction:
+  - `@group(1) @binding(12) var VolumetricDepthTexture : texture_2d<f32>;` → `binding 1 12 var VolumetricDepthTexture texture_2d f32` (11 bytes savings)
+  - `diagnostic(off, derivative_uniformity);` → `diagnostic_off_derivative_uniformity` (6 bytes savings)
+- Variable size optimization:
+  - Use single-byte indices for variables up to 255 before switching to variable size encoding
+  - Signal encoding scheme at file start
+
+### Code Structure Optimizations (Do this at the tint level if possible)
+- Dead Store Elimination (DSE):
+  - Remove unnecessary temporaries and intermediate assignments
+  - Example: `var x_435 : bool; x_435 = (x_429 < x_395.y); x_436 = x_435;` → `x_436 = (x_429 < x_395.y);`
+- Code Block Consolidation:
+  - Flatten nested control structures where possible
+
+### Pattern Optimizations
+- Constant Folding:
+
+## Planned Features
+- [ ] Optimization statistics reporting
+- [ ] Configurable optimization levels
+- [ ] Source maps for debugging
+
 ## License
 
 Apache License 2.0
